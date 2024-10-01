@@ -85,6 +85,10 @@ func MetricFamilyToText(out io.Writer, in *dto.MetricFamily) (written int, err e
 		return 0, fmt.Errorf("MetricFamily has no name: %s", in)
 	}
 
+	if shouldSkipZeroMetric(in) { //* Added by bdollma - Patch
+		return 0, nil
+	}
+
 	// Try the interface upgrade. If it doesn't work, we'll use a
 	// bufio.Writer from the sync.Pool.
 	w, ok := out.(enhancedWriter)
@@ -169,6 +173,9 @@ func MetricFamilyToText(out io.Writer, in *dto.MetricFamily) (written int, err e
 				return written, fmt.Errorf(
 					"expected counter in metric %s %s", name, metric,
 				)
+			}
+			if metric.Counter.GetValue() == 0 { //* Added by bdollma - Patch
+				continue
 			}
 			n, err = writeSample(
 				w, name, "", metric, "", 0,
@@ -278,6 +285,19 @@ func MetricFamilyToText(out io.Writer, in *dto.MetricFamily) (written int, err e
 		}
 	}
 	return
+}
+
+// * Added by bdollma - Patch
+func shouldSkipZeroMetric(in *dto.MetricFamily) bool {
+	if in.GetType() != dto.MetricType_COUNTER {
+		return false
+	}
+	for _, metric := range in.Metric {
+		if metric.Counter != nil && metric.Counter.GetValue() != 0 {
+			return false
+		}
+	}
+	return true
 }
 
 // writeSample writes a single sample in text format to w, given the metric
